@@ -76,30 +76,95 @@
         
         console.log('Authorization code received:', code.substring(0, 20) + '...');
         
-        // Build the redirect URL back to your app
-        // For web: redirect in the current window (popup or main)
-        // Detect production vs dev based on hostname
-        const isDev = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
-        const appBaseUrl = isDev ? 'http://localhost:8080' : 'https://yourdomain.com'; // TODO: Update for production
+        // SECURE: POST authorization code directly to API Gateway
+        // This keeps the code server-side and never exposes it to the Flutter app
+        document.getElementById('statusText').textContent = 'Exchanging authorization code...';
         
-        // Redirect back to your app's oauth-callback route with the code
-        const redirectUrl = `${appBaseUrl}/oauth-callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
-        
-        console.log('Redirecting to:', redirectUrl);
-        document.getElementById('statusText').textContent = 'Redirecting to app...';
-        
-        // If this is a popup (has an opener), redirect the opener and close
+        // Get the Cognito token from the parent window
+        // The parent window must expose this via postMessage
         if (window.opener && !window.opener.closed) {
-            console.log('Popup detected - redirecting opener window');
-            window.opener.location.href = redirectUrl;
-            document.getElementById('title').textContent = 'Success!';
-            document.getElementById('message').textContent = 'Closing window...';
-            document.getElementById('spinner').style.display = 'none';
-            setTimeout(() => window.close(), 1000);
+            console.log('Requesting Cognito token from parent window...');
+            
+            // Request the token from parent
+            window.opener.postMessage({
+                type: 'REQUEST_COGNITO_TOKEN_FOR_OAUTH',
+                code: code,
+                state: state
+            }, '*');
+            
+            // Listen for the token response
+            window.addEventListener('message', async function(event) {
+                if (event.data.type === 'COGNITO_TOKEN_RESPONSE') {
+                    const cognitoToken = event.data.token;
+                    console.log('Received Cognito token, posting to API Gateway...');
+                    
+                    // Determine provider from state or URL
+                    const provider = 'linkedin'; // TODO: Extract from state if multiple providers
+                    
+                    // API Gateway endpoint
+                    const apiGatewayUrl = 'https://ytyeeucfki.execute-api.us-east-1.amazonaws.com/dev';
+                    const endpoint = `${apiGatewayUrl}/integrations/credentials/${provider}`;
+                    
+                    // LinkedIn registered redirect URI (this GitHub Pages URL)
+                    const redirectUri = 'https://autoworks29.github.io/pages/';
+                    
+                    try {
+                        document.getElementById('statusText').textContent = 'Exchanging code for tokens...';
+                        
+                        const response = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${cognitoToken}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                authorizationCode: code,
+                                redirectUri: redirectUri
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            const result = await response.json();
+                            console.log('Success!', result);
+                            
+                            document.getElementById('title').textContent = 'Connected!';
+                            document.getElementById('message').textContent = 'Integration successful';
+                            document.getElementById('spinner').style.display = 'none';
+                            
+                            // Notify parent of success
+                            window.opener.postMessage({
+                                type: 'OAUTH_COMPLETE',
+                                success: true,
+                                provider: provider
+                            }, '*');
+                            
+                            setTimeout(() => window.close(), 1500);
+                        } else {
+                            const errorText = await response.text();
+                            console.error('API Gateway error:', response.status, errorText);
+                            throw new Error(`API error: ${response.status} - ${errorText}`);
+                        }
+                    } catch (error) {
+                        console.error('Failed to exchange code:', error);
+                        document.getElementById('spinner').style.display = 'none';
+                        document.getElementById('title').textContent = 'Error';
+                        document.getElementById('message').textContent = error.message;
+                        
+                        // Notify parent of failure
+                        window.opener.postMessage({
+                            type: 'OAUTH_COMPLETE',
+                            success: false,
+                            error: error.message
+                        }, '*');
+                    }
+                }
+            });
         } else {
-            // Not a popup - redirect this window
-            console.log('No opener - redirecting this window');
-            window.location.href = redirectUrl;
+            // Not a popup - can't get Cognito token
+            console.log('No opener window - cannot complete OAuth flow');
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('title').textContent = 'Error';
+            document.getElementById('message').textContent = 'Please use the Connect button in the app';
         }
         
         // Fallback: If redirect doesn't work after 2 seconds, show message
