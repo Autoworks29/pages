@@ -42,26 +42,16 @@
 <body>
     <div class="container">
         <div class="spinner" id="spinner"></div>
-        <h1 id="title">Success!</h1>
-        <p id="message">Click the button below to return to Autoworks</p>
-        <button id="openAppBtn" style="
-            margin-top: 20px;
-            padding: 12px 24px;
-            background: white;
-            color: #667eea;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            display: none;
-        ">Open Autoworks</button>
-        <p id="deepLinkText" style="font-size: 12px; opacity: 0.7; margin-top: 20px;"></p>
+        <h1 id="title">Redirecting...</h1>
+        <p id="message">Taking you back to Autoworks</p>
+        <p id="statusText" style="font-size: 12px; opacity: 0.7; margin-top: 20px;"></p>
     </div>
 
     <script>
         // Get the current URL with all query parameters
         const urlParams = new URLSearchParams(window.location.search);
+        
+        console.log('GitHub Pages redirect received:', window.location.href);
         
         // Check for errors
         const error = urlParams.get('error');
@@ -69,53 +59,51 @@
             document.getElementById('spinner').style.display = 'none';
             document.getElementById('title').textContent = 'Authentication Failed';
             document.getElementById('message').textContent = `Error: ${error}`;
-            document.getElementById('deepLinkText').textContent = `Error description: ${urlParams.get('error_description') || 'Unknown error'}`;
+            document.getElementById('statusText').textContent = `${urlParams.get('error_description') || 'Unknown error'}`;
             return;
         }
         
-        // Determine which provider based on the path
-        const path = window.location.pathname;
-        let provider = 'linkedin'; // default
+        // Get the authorization code
+        const code = urlParams.get('code');
+        const state = urlParams.get('state');
         
-        if (path.includes('google')) provider = 'google';
-        else if (path.includes('microsoft')) provider = 'microsoft';
-        else if (path.includes('facebook')) provider = 'facebook';
-        else if (path.includes('github')) provider = 'github';
-        
-        // Build deep link URL with all parameters
-        let deepLink = `autoworks://oauth/${provider}`;
-        
-        // Preserve all query parameters (code, state, error, etc.)
-        if (urlParams.toString()) {
-            deepLink += '?' + urlParams.toString();
+        if (!code) {
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('title').textContent = 'Error';
+            document.getElementById('message').textContent = 'No authorization code received';
+            return;
         }
         
-        console.log('Deep link:', deepLink);
+        console.log('Authorization code received:', code.substring(0, 20) + '...');
         
-        // Show the button
-        document.getElementById('spinner').style.display = 'none';
-        const button = document.getElementById('openAppBtn');
-        button.style.display = 'block';
-        document.getElementById('deepLinkText').textContent = `Deep link: ${deepLink}`;
+        // Build the redirect URL back to your app
+        // Change localhost:8080 to your production domain when deployed
+        const isDev = window.location.hostname === 'localhost';
+        const appBaseUrl = isDev ? 'http://localhost:8080' : 'http://localhost:8080'; // TODO: Update for production
         
-        // Try to open automatically
-        function attemptDeepLink() {
-            console.log('Attempting to open:', deepLink);
-            window.location.href = deepLink;
-        }
+        // Redirect back to your app's oauth-callback route with the code
+        const redirectUrl = `${appBaseUrl}/oauth-callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
         
-        // Attempt immediately
-        attemptDeepLink();
+        console.log('Redirecting to:', redirectUrl);
+        document.getElementById('statusText').textContent = 'Redirecting to app...';
         
-        // Button click handler
-        button.addEventListener('click', attemptDeepLink);
+        // Redirect immediately
+        window.location.href = redirectUrl;
         
-        // Fallback message after 1 second
+        // Fallback: If redirect doesn't work after 2 seconds, show message
         setTimeout(() => {
-            document.getElementById('title').textContent = 'Almost there!';
-            document.getElementById('message').textContent = 'Click the button to return to Autoworks';
-        }, 1000);
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('title').textContent = 'Redirect Failed';
+            document.getElementById('message').textContent = 'Click below to continue manually';
+            
+            const link = document.createElement('a');
+            link.href = redirectUrl;
+            link.textContent = 'Click here to return to Autoworks';
+            link.style.cssText = 'display: block; margin-top: 20px; color: white; text-decoration: underline;';
+            document.querySelector('.container').appendChild(link);
+        }, 2000);
     </script>
 </body>
 </html>
+
 
