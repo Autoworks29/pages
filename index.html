@@ -41,14 +41,37 @@
 </head>
 <body>
     <div class="container">
-        <div class="spinner"></div>
-        <h1>Connecting...</h1>
-        <p>Redirecting you back to Autoworks</p>
+        <div class="spinner" id="spinner"></div>
+        <h1 id="title">Success!</h1>
+        <p id="message">Click the button below to return to Autoworks</p>
+        <button id="openAppBtn" style="
+            margin-top: 20px;
+            padding: 12px 24px;
+            background: white;
+            color: #667eea;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            display: none;
+        ">Open Autoworks</button>
+        <p id="deepLinkText" style="font-size: 12px; opacity: 0.7; margin-top: 20px;"></p>
     </div>
 
     <script>
         // Get the current URL with all query parameters
         const urlParams = new URLSearchParams(window.location.search);
+        
+        // Check for errors
+        const error = urlParams.get('error');
+        if (error) {
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('title').textContent = 'Authentication Failed';
+            document.getElementById('message').textContent = `Error: ${error}`;
+            document.getElementById('deepLinkText').textContent = `Error description: ${urlParams.get('error_description') || 'Unknown error'}`;
+            return;
+        }
         
         // Determine which provider based on the path
         const path = window.location.pathname;
@@ -67,22 +90,31 @@
             deepLink += '?' + urlParams.toString();
         }
         
-        console.log('Redirecting to:', deepLink);
+        console.log('Deep link:', deepLink);
         
-        // Attempt to open the app
-        window.location.href = deepLink;
+        // Show the button
+        document.getElementById('spinner').style.display = 'none';
+        const button = document.getElementById('openAppBtn');
+        button.style.display = 'block';
+        document.getElementById('deepLinkText').textContent = `Deep link: ${deepLink}`;
         
-        // Fallback message after 2 seconds if app doesn't open
+        // Try to open automatically
+        function attemptDeepLink() {
+            console.log('Attempting to open:', deepLink);
+            window.location.href = deepLink;
+        }
+        
+        // Attempt immediately
+        attemptDeepLink();
+        
+        // Button click handler
+        button.addEventListener('click', attemptDeepLink);
+        
+        // Fallback message after 1 second
         setTimeout(() => {
-            document.querySelector('.container').innerHTML = `
-                <h1>Almost there!</h1>
-                <p>If the app didn't open automatically, please open Autoworks manually.</p>
-                <br>
-                <p style="font-size: 12px; opacity: 0.7;">
-                    Deep link: ${deepLink}
-                </p>
-            `;
-        }, 2000);
+            document.getElementById('title').textContent = 'Almost there!';
+            document.getElementById('message').textContent = 'Click the button to return to Autoworks';
+        }, 1000);
     </script>
 </body>
 </html>
