@@ -75,97 +75,57 @@
         }
         
         console.log('Authorization code received:', code.substring(0, 20) + '...');
+        console.log('State:', state);
         
-        // SECURE: POST authorization code directly to API Gateway
-        // This keeps the code server-side and never exposes it to the Flutter app
+        // POST directly to API Gateway (no auth required - userId is in state)
+        const apiGatewayUrl = 'https://ytyeeucfki.execute-api.us-east-1.amazonaws.com/dev';
+        const provider = 'linkedin';
+        const endpoint = `${apiGatewayUrl}/integrations/credentials/${provider}`;
+        const redirectUri = 'https://autoworks29.github.io/pages/';
+        
         document.getElementById('statusText').textContent = 'Exchanging authorization code...';
         
-        // Get the Cognito token from the parent window
-        // The parent window must expose this via postMessage
-        if (window.opener && !window.opener.closed) {
-            console.log('Requesting Cognito token from parent window...');
-            
-            // Request the token from parent
-            window.opener.postMessage({
-                type: 'REQUEST_COGNITO_TOKEN_FOR_OAUTH',
-                code: code,
+        fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                authorizationCode: code,
+                redirectUri: redirectUri,
                 state: state
-            }, '*');
+            })
+        })
+        .then(response => {
+            console.log('API Gateway response status:', response.status);
+            return response.json().then(data => ({ status: response.status, data }));
+        })
+        .then(({ status, data }) => {
+            console.log('API Gateway response:', data);
             
-            // Listen for the token response
-            window.addEventListener('message', async function(event) {
-                if (event.data.type === 'COGNITO_TOKEN_RESPONSE') {
-                    const cognitoToken = event.data.token;
-                    console.log('Received Cognito token, posting to API Gateway...');
-                    
-                    // Determine provider from state or URL
-                    const provider = 'linkedin'; // TODO: Extract from state if multiple providers
-                    
-                    // API Gateway endpoint
-                    const apiGatewayUrl = 'https://ytyeeucfki.execute-api.us-east-1.amazonaws.com/dev';
-                    const endpoint = `${apiGatewayUrl}/integrations/credentials/${provider}`;
-                    
-                    // LinkedIn registered redirect URI (this GitHub Pages URL)
-                    const redirectUri = 'https://autoworks29.github.io/pages/';
-                    
-                    try {
-                        document.getElementById('statusText').textContent = 'Exchanging code for tokens...';
-                        
-                        const response = await fetch(endpoint, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${cognitoToken}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                authorizationCode: code,
-                                redirectUri: redirectUri
-                            })
-                        });
-                        
-                        if (response.ok) {
-                            const result = await response.json();
-                            console.log('Success!', result);
-                            
-                            document.getElementById('title').textContent = 'Connected!';
-                            document.getElementById('message').textContent = 'Integration successful';
-                            document.getElementById('spinner').style.display = 'none';
-                            
-                            // Notify parent of success
-                            window.opener.postMessage({
-                                type: 'OAUTH_COMPLETE',
-                                success: true,
-                                provider: provider
-                            }, '*');
-                            
-                            setTimeout(() => window.close(), 1500);
-                        } else {
-                            const errorText = await response.text();
-                            console.error('API Gateway error:', response.status, errorText);
-                            throw new Error(`API error: ${response.status} - ${errorText}`);
-                        }
-                    } catch (error) {
-                        console.error('Failed to exchange code:', error);
-                        document.getElementById('spinner').style.display = 'none';
-                        document.getElementById('title').textContent = 'Error';
-                        document.getElementById('message').textContent = error.message;
-                        
-                        // Notify parent of failure
-                        window.opener.postMessage({
-                            type: 'OAUTH_COMPLETE',
-                            success: false,
-                            error: error.message
-                        }, '*');
-                    }
-                }
-            });
-        } else {
-            // Not a popup - can't get Cognito token
-            console.log('No opener window - cannot complete OAuth flow');
+            if (status === 200) {
+                document.getElementById('spinner').style.display = 'none';
+                document.getElementById('title').textContent = 'Success!';
+                document.getElementById('message').textContent = 'LinkedIn connected successfully';
+                document.getElementById('statusText').textContent = 'You can close this page';
+                
+                // Redirect back to app after 2 seconds
+                setTimeout(() => {
+                    const isDev = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
+                    const appBaseUrl = isDev ? 'http://localhost:8080' : 'https://yourdomain.com';
+                    window.location.href = `${appBaseUrl}/profile`;
+                }, 2000);
+            } else {
+                throw new Error(data.message || 'Unknown error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
             document.getElementById('spinner').style.display = 'none';
             document.getElementById('title').textContent = 'Error';
-            document.getElementById('message').textContent = 'Please use the Connect button in the app';
-        }
+            document.getElementById('message').textContent = error.message || 'Failed to connect';
+            document.getElementById('statusText').textContent = 'Please try again';
+        });
         
         // Fallback: If redirect doesn't work after 2 seconds, show message
         setTimeout(() => {
@@ -182,4 +142,5 @@
     </script>
 </body>
 </html>
+
 
