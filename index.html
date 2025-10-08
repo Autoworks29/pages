@@ -45,9 +45,14 @@
         <h1 id="title">Redirecting...</h1>
         <p id="message">Taking you back to Autoworks</p>
         <p id="statusText" style="font-size: 12px; opacity: 0.7; margin-top: 20px;"></p>
-        <pre id="debugLog" style="font-size: 10px; text-align: left; max-width: 500px; overflow-x: auto; margin-top: 20px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 5px; max-height: 300px; overflow-y: auto;"></pre>
+        <pre id="debugLog" style="font-size: 10px; text-align: left; max-width: 500px; overflow-x: auto; margin-top: 20px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 5px; max-height: 300px; overflow-y: auto;">LOADING v2.0...</pre>
     </div>
 
+    <script>
+        // Immediate test to show page is loading
+        document.getElementById('title').textContent = 'OAuth Callback v2.0';
+        document.getElementById('message').textContent = 'Processing...';
+    </script>
     <script>
         // Debug logger that shows in UI
         function debugLog(msg) {
