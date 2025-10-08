@@ -77,9 +77,10 @@
         console.log('Authorization code received:', code.substring(0, 20) + '...');
         
         // Build the redirect URL back to your app
-        // Change localhost:8080 to your production domain when deployed
-        const isDev = window.location.hostname === 'localhost';
-        const appBaseUrl = isDev ? 'http://localhost:8080' : 'http://localhost:8080'; // TODO: Update for production
+        // For web: redirect in the current window (popup or main)
+        // Detect production vs dev based on hostname
+        const isDev = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
+        const appBaseUrl = isDev ? 'http://localhost:8080' : 'https://yourdomain.com'; // TODO: Update for production
         
         // Redirect back to your app's oauth-callback route with the code
         const redirectUrl = `${appBaseUrl}/oauth-callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
@@ -87,8 +88,19 @@
         console.log('Redirecting to:', redirectUrl);
         document.getElementById('statusText').textContent = 'Redirecting to app...';
         
-        // Redirect immediately
-        window.location.href = redirectUrl;
+        // If this is a popup (has an opener), redirect the opener and close
+        if (window.opener && !window.opener.closed) {
+            console.log('Popup detected - redirecting opener window');
+            window.opener.location.href = redirectUrl;
+            document.getElementById('title').textContent = 'Success!';
+            document.getElementById('message').textContent = 'Closing window...';
+            document.getElementById('spinner').style.display = 'none';
+            setTimeout(() => window.close(), 1000);
+        } else {
+            // Not a popup - redirect this window
+            console.log('No opener - redirecting this window');
+            window.location.href = redirectUrl;
+        }
         
         // Fallback: If redirect doesn't work after 2 seconds, show message
         setTimeout(() => {
@@ -105,5 +117,4 @@
     </script>
 </body>
 </html>
-
 
