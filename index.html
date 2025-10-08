@@ -45,13 +45,23 @@
         <h1 id="title">Redirecting...</h1>
         <p id="message">Taking you back to Autoworks</p>
         <p id="statusText" style="font-size: 12px; opacity: 0.7; margin-top: 20px;"></p>
+        <pre id="debugLog" style="font-size: 10px; text-align: left; max-width: 500px; overflow-x: auto; margin-top: 20px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 5px; max-height: 300px; overflow-y: auto;"></pre>
     </div>
 
     <script>
+        // Debug logger that shows in UI
+        function debugLog(msg) {
+            console.log(msg);
+            const debugEl = document.getElementById('debugLog');
+            debugEl.textContent += msg + '\n';
+            debugEl.scrollTop = debugEl.scrollHeight;
+        }
+        
         // Get the current URL with all query parameters
         const urlParams = new URLSearchParams(window.location.search);
         
-        console.log('GitHub Pages redirect received:', window.location.href);
+        debugLog('=== GITHUB PAGES OAUTH CALLBACK ===');
+        debugLog('URL: ' + window.location.href);
         
         // Check for errors
         const error = urlParams.get('error');
@@ -74,8 +84,8 @@
             return;
         }
         
-        console.log('Authorization code received:', code.substring(0, 20) + '...');
-        console.log('State:', state);
+        debugLog('Code: ' + code.substring(0, 20) + '...');
+        debugLog('State: ' + state.substring(0, 30) + '...');
         
         // POST directly to API Gateway (no auth required - userId is in state)
         const apiGatewayUrl = 'https://ytyeeucfki.execute-api.us-east-1.amazonaws.com/dev';
@@ -85,10 +95,21 @@
         
         document.getElementById('statusText').textContent = 'Exchanging authorization code...';
         
+        debugLog('\n=== POSTING TO API GATEWAY ===');
+        debugLog('Endpoint: ' + endpoint);
+        debugLog('Method: POST');
+        debugLog('Body: ' + JSON.stringify({
+            authorizationCode: code.substring(0, 20) + '...',
+            redirectUri: redirectUri,
+            state: state.substring(0, 30) + '...'
+        }, null, 2));
+        
         fetch(endpoint, {
             method: 'POST',
+            mode: 'cors',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
             body: JSON.stringify({
                 authorizationCode: code,
@@ -97,34 +118,58 @@
             })
         })
         .then(response => {
-            console.log('API Gateway response status:', response.status);
-            return response.json().then(data => ({ status: response.status, data }));
-        })
-        .then(({ status, data }) => {
-            console.log('API Gateway response:', data);
+            debugLog('\n=== RESPONSE RECEIVED ===');
+            debugLog('Status: ' + response.status + ' ' + response.statusText);
+            debugLog('Headers: ' + JSON.stringify(Array.from(response.headers.entries()), null, 2));
             
-            if (status === 200) {
-                document.getElementById('spinner').style.display = 'none';
-                document.getElementById('title').textContent = 'Success!';
-                document.getElementById('message').textContent = 'LinkedIn connected successfully';
-                document.getElementById('statusText').textContent = 'You can close this page';
-                
-                // Redirect back to app after 2 seconds
-                setTimeout(() => {
-                    const isDev = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
-                    const appBaseUrl = isDev ? 'http://localhost:8080' : 'https://yourdomain.com';
-                    window.location.href = `${appBaseUrl}/profile`;
-                }, 2000);
-            } else {
-                throw new Error(data.message || 'Unknown error');
+            if (!response.ok) {
+                return response.text().then(text => {
+                    debugLog('ERROR Response body: ' + text);
+                    throw new Error(`API error ${response.status}: ${text}`);
+                });
             }
+            
+            return response.json();
+        })
+        .then(data => {
+            debugLog('\n=== SUCCESS ===');
+            debugLog('Response: ' + JSON.stringify(data, null, 2));
+            
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('title').textContent = 'Success!';
+            document.getElementById('message').textContent = 'LinkedIn connected successfully';
+            document.getElementById('statusText').textContent = 'Closing window...';
+            
+            // Notify parent window of success
+            if (window.opener && !window.opener.closed) {
+                window.opener.postMessage({
+                    type: 'OAUTH_SUCCESS',
+                    provider: 'linkedin'
+                }, '*');
+            }
+            
+            // Close popup after 1.5 seconds
+            setTimeout(() => {
+                window.close();
+            }, 1500);
         })
         .catch(error => {
-            console.error('Error:', error);
+            debugLog('\n=== ERROR ===');
+            debugLog('Error: ' + error.message);
+            debugLog('Stack: ' + error.stack);
+            
             document.getElementById('spinner').style.display = 'none';
             document.getElementById('title').textContent = 'Error';
             document.getElementById('message').textContent = error.message || 'Failed to connect';
-            document.getElementById('statusText').textContent = 'Please try again';
+            document.getElementById('statusText').textContent = 'See details below';
+            
+            // Notify parent window of failure
+            if (window.opener && !window.opener.closed) {
+                window.opener.postMessage({
+                    type: 'OAUTH_ERROR',
+                    error: error.message
+                }, '*');
+            }
         });
         
         // Fallback: If redirect doesn't work after 2 seconds, show message
@@ -142,5 +187,4 @@
     </script>
 </body>
 </html>
-
 
